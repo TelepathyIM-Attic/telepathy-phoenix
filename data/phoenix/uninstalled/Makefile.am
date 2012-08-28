@@ -1,8 +1,11 @@
 service_files = \
+  dbus-1/services/org.freedesktop.Telepathy.Client.Phoenix.EchoCall.service \
   dbus-1/services/org.freedesktop.Telepathy.Client.Phoenix.EchoText.service \
   dbus-1/services/org.freedesktop.Telepathy.Client.Phoenix.Approver.service \
   dbus-1/services/org.freedesktop.Telepathy.Client.Phoenix.Authenticator.service
+
 client_files = \
+  telepathy/clients/Phoenix.EchoCall.client \
   telepathy/clients/Phoenix.EchoText.client \
   telepathy/clients/Phoenix.Approver.client \
   telepathy/clients/Phoenix.Authenticator.client
