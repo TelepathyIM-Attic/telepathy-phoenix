@@ -457,18 +457,6 @@ conference_removed_cb (TfChannel *channel,
   gst_bin_remove (GST_BIN (context->pipeline), conference);
 }
 
-static gboolean
-dump_pipeline_cb (gpointer data)
-{
-  ChannelContext *context = data;
-
-  GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (context->pipeline),
-    GST_DEBUG_GRAPH_SHOW_ALL,
-    "call-handler");
-
-  return TRUE;
-}
-
 static void
 new_tf_channel_cb (GObject *source,
   GAsyncResult *result,
@@ -486,9 +474,6 @@ new_tf_channel_cb (GObject *source,
       g_error ("Failed to create channel: %s", error->message);
       g_clear_error (&error);
     }
-
-  g_debug ("Adding timeout");
-  g_timeout_add_seconds (5, dump_pipeline_cb, context);
 
   g_signal_connect (context->channel, "fs-conference-added",
     G_CALLBACK (conference_added_cb), context);
