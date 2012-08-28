@@ -614,7 +614,7 @@ main (int argc, char **argv)
     FALSE,
     FALSE,
     "Phoenix.EchoCall",
-    TRUE,
+    FALSE,
     new_call_channel_cb,
     NULL,
     NULL);
