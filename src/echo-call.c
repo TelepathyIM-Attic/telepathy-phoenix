@@ -526,8 +526,6 @@ proxy_invalidated_cb (TpProxy *proxy,
   g_object_unref (context->proxy);
 
   g_slice_free (ChannelContext, context);
-
-  g_main_loop_quit (loop);
 }
 
 static void
