@@ -531,6 +531,18 @@ proxy_invalidated_cb (TpProxy *proxy,
 }
 
 static void
+call_state_changed_cb (TpCallChannel *self,
+  guint state,
+  guint flags,
+  TpCallStateReason reason,
+  GHashTable *details,
+  gpointer user_data)
+{
+  if (state == TP_CALL_STATE_INITIALISED)
+    tp_call_channel_accept_async (self, NULL, NULL);
+}
+
+static void
 new_call_channel_cb (TpSimpleHandler *handler,
     TpAccount *account,
     TpConnection *connection,
@@ -541,14 +553,14 @@ new_call_channel_cb (TpSimpleHandler *handler,
     gpointer user_data)
 {
   ChannelContext *context;
-  TpChannel *proxy;
+  TpCallChannel *call;
   GstBus *bus;
   GstElement *pipeline;
   GstStateChangeReturn ret;
 
   g_debug ("New channel");
 
-  proxy = channels->data;
+  call = channels->data;
 
   pipeline = gst_pipeline_new (NULL);
 
@@ -556,7 +568,7 @@ new_call_channel_cb (TpSimpleHandler *handler,
 
   if (ret == GST_STATE_CHANGE_FAILURE)
     {
-      tp_channel_close_async (TP_CHANNEL (proxy), NULL, NULL);
+      tp_channel_close_async (TP_CHANNEL (call), NULL, NULL);
       g_object_unref (pipeline);
       g_warning ("Failed to start an empty pipeline !?");
       return;
@@ -569,15 +581,27 @@ new_call_channel_cb (TpSimpleHandler *handler,
   context->buswatch = gst_bus_add_watch (bus, bus_watch_cb, context);
   g_object_unref (bus);
 
-  tf_channel_new_async (proxy, new_tf_channel_cb, context);
+  tf_channel_new_async (TP_CHANNEL (call), new_tf_channel_cb, context);
 
   tp_handle_channels_context_accept (handler_context);
 
-  tp_cli_channel_type_call_call_accept (proxy, -1,
-      NULL, NULL, NULL, NULL);
+  if (tp_channel_get_requested (TP_CHANNEL (call)))
+    {
+      if (tp_call_channel_get_state (call,
+          NULL, NULL, NULL) == TP_CALL_STATE_PENDING_INITIATOR)
+        tp_call_channel_accept_async (call, NULL, NULL);
+    }
+  else
+    {
+      g_signal_connect (call, "state-changed",
+        G_CALLBACK (call_state_changed_cb), NULL);
+      if (tp_call_channel_get_state (call, NULL, NULL, NULL) ==
+          TP_CALL_STATE_INITIALISED)
+        tp_call_channel_accept_async (call, NULL, NULL);
+    }
 
-  context->proxy = g_object_ref (proxy);
-  g_signal_connect (proxy, "invalidated",
+  context->proxy = g_object_ref (call);
+  g_signal_connect (call, "invalidated",
     G_CALLBACK (proxy_invalidated_cb),
     context);
 }
