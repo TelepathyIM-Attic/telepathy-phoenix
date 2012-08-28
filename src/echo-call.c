@@ -29,19 +29,6 @@ typedef struct {
   TpChannel *proxy;
   TfChannel *channel;
   GList *notifiers;
-
-  guint input_volume;
-  guint output_volume;
-
-  gboolean has_audio_src;
-  gboolean has_video_src;
-
-  GstElement *video_input;
-  GstElement *video_capsfilter;
-
-  guint width;
-  guint height;
-  guint framerate;
 } ChannelContext;
 
 GMainLoop *loop;
@@ -72,18 +59,30 @@ bus_watch_cb (GstBus *bus,
 }
 
 static void
-on_audio_output_volume_changed (TfContent *content,
-  GParamSpec *spec,
-  GstElement *volume)
+src_pad_unlinked_cb (GstPad *pad,
+    GstPad *peer,
+    gpointer user_data)
 {
-  guint output_volume = 0;
+  ChannelContext *context = user_data;
+  GstElement *element;
+  GstPad *element_srcpad;
 
-  g_object_get (content, "output-volume", &output_volume, NULL);
+  g_debug ("Src pad unlinked");
 
-  if (output_volume == 0)
-    return;
+  element = gst_pad_get_parent_element (peer);
+  element_srcpad = gst_element_get_pad (element, "src");
 
-  g_object_set (volume, "volume", (double)output_volume / 255.0, NULL);
+  if (gst_pad_is_linked (element_srcpad))
+    {
+      GstPad *peer = gst_pad_get_peer (element_srcpad);
+      gst_pad_unlink (element_srcpad, peer);
+      gst_object_unref (peer);
+    }
+
+  gst_element_set_locked_state (element, TRUE);
+  gst_element_set_state (element, GST_STATE_NULL);
+  gst_bin_remove (GST_BIN (context->pipeline), element);
+  gst_object_unref (element);
 }
 
 static void
@@ -96,308 +95,57 @@ src_pad_added_cb (TfContent *content,
 {
   ChannelContext *context = user_data;
   gchar *cstr = fs_codec_to_string (codec);
-  FsMediaType mtype;
-  GstPad *sinkpad;
+  GstPad *element_sinkpad;
+  GstPad *element_srcpad;
+  GstPad *content_sinkpad;
   GstElement *element;
   GstStateChangeReturn ret;
 
   g_debug ("New src pad: %s", cstr);
-  g_object_get (content, "media-type", &mtype, NULL);
+  g_object_get (content, "sink-pad", &content_sinkpad, NULL);
 
-  switch (mtype)
-    {
-      case FS_MEDIA_TYPE_AUDIO:
-        {
-          GstElement *volume = NULL;
-          gchar *tmp_str = g_strdup_printf ("audioconvert ! audioresample "
-              "! volume name=\"output_volume%s\" "
-              "! audioconvert ! fakesink", cstr);
-          element = gst_parse_bin_from_description (tmp_str,
-              TRUE, NULL);
-          g_free (tmp_str);
-
-          tmp_str = g_strdup_printf ("output_volume%s", cstr);
-          volume = gst_bin_get_by_name (GST_BIN (element), tmp_str);
-          g_free (tmp_str);
-
-          tp_g_signal_connect_object (content, "notify::output-volume",
-              G_CALLBACK (on_audio_output_volume_changed),
-              volume, 0);
-
-          gst_object_unref (volume);
-
-          break;
-        }
-      case FS_MEDIA_TYPE_VIDEO:
-        element = gst_parse_bin_from_description (
-          "ffmpegcolorspace ! videoscale ! fakesink",
-          TRUE, NULL);
-        break;
-      default:
-        g_warning ("Unknown media type");
-        return;
-    }
+  element = gst_element_factory_make ("queue", NULL);
 
   gst_bin_add (GST_BIN (context->pipeline), element);
-  sinkpad = gst_element_get_pad (element, "sink");
+
+  element_sinkpad = gst_element_get_pad (element, "sink");
+  element_srcpad = gst_element_get_pad (element, "src");
+
   ret = gst_element_set_state (element, GST_STATE_PLAYING);
   if (ret == GST_STATE_CHANGE_FAILURE)
     {
       tp_channel_close_async (TP_CHANNEL (context->proxy), NULL, NULL);
       g_warning ("Failed to start sink pipeline !?");
-      return;
+      goto err;
     }
 
-  if (GST_PAD_LINK_FAILED (gst_pad_link (pad, sinkpad)))
+  if (GST_PAD_LINK_FAILED (gst_pad_link (pad, element_sinkpad)))
     {
       tp_channel_close_async (TP_CHANNEL (context->proxy), NULL, NULL);
-      g_warning ("Couldn't link sink pipeline !?");
-      return;
+      g_warning ("Couldn't link src pad to queue !?");
+      goto err;
     }
 
-  g_object_unref (sinkpad);
-}
-
-static void
-update_video_parameters (ChannelContext *context, gboolean restart)
-{
-  GstCaps *caps;
-  GstClock *clock;
-
-  if (restart)
-    {
-      /* Assuming the pipeline is in playing state */
-      gst_element_set_locked_state (context->video_input, TRUE);
-      gst_element_set_state (context->video_input, GST_STATE_NULL);
-    }
-
-  g_object_get (context->video_capsfilter, "caps", &caps, NULL);
-  caps = gst_caps_make_writable (caps);
-
-  gst_caps_set_simple (caps,
-      "framerate", GST_TYPE_FRACTION, context->framerate, 1,
-      "width", G_TYPE_INT, context->width,
-      "height", G_TYPE_INT, context->height,
-      NULL);
-
-  g_object_set (context->video_capsfilter, "caps", caps, NULL);
-
-  if (restart)
-    {
-      clock = gst_pipeline_get_clock (GST_PIPELINE (context->pipeline));
-      /* Need to reset the clock if we set the pipeline back to ready by hand */
-      if (clock != NULL)
-        {
-          gst_element_set_clock (context->video_input, clock);
-          g_object_unref (clock);
-        }
-
-      gst_element_set_locked_state (context->video_input, FALSE);
-      gst_element_sync_state_with_parent (context->video_input);
-    }
-}
-
-static void
-on_video_framerate_changed (TfContent *content,
-  GParamSpec *spec,
-  ChannelContext *context)
-{
-  guint framerate;
-
-  g_object_get (content, "framerate", &framerate, NULL);
-
-  if (framerate != 0)
-    context->framerate = framerate;
-
-  update_video_parameters (context, FALSE);
-}
-
-static void
-on_video_resolution_changed (TfContent *content,
-   guint width,
-   guint height,
-   ChannelContext *context)
-{
-  g_assert (width > 0 && height > 0);
-
-  context->width = width;
-  context->height = height;
-
-  update_video_parameters (context, TRUE);
-}
-
-static void
-on_audio_input_volume_changed (TfContent *content,
-  GParamSpec *spec,
-  ChannelContext *context)
-{
-  GstElement *volume;
-  guint input_volume = 0;
-
-  g_object_get (content, "request-input-volume", &input_volume, NULL);
-
-  if (input_volume == 0)
-    return;
-
-  volume = gst_bin_get_by_name (GST_BIN (context->pipeline), "input_volume");
-  g_object_set (volume, "volume", (double)input_volume / 255.0, NULL);
-  gst_object_unref (volume);
-}
-
-static GstElement *
-setup_audio_source (ChannelContext *context, TfContent *content)
-{
-  GstElement *result;
-  GstElement *volume;
-  gint input_volume = 0;
-
-  result = gst_parse_bin_from_description (
-      "audiotestsrc is-live=true ! audio/x-raw-int,rate=8000 ! queue"
-      " ! audioconvert ! audioresample"
-      " ! volume name=input_volume ! audioconvert ",
-      TRUE, NULL);
-
-  /* FIXME Need to handle both requested/reported */
-  /* TODO Volume control should be handled in FsIo */
-  g_object_get (content,
-      "requested-input-volume", &input_volume,
-      NULL);
-
-  if (input_volume >= 0)
-    {
-      volume = gst_bin_get_by_name (GST_BIN (result), "input_volume");
-      g_debug ("Requested volume is: %i", input_volume);
-      g_object_set (volume, "volume", (double)input_volume / 255.0, NULL);
-      gst_object_unref (volume);
-    }
-
-  g_signal_connect (content, "notify::request-input-volume",
-      G_CALLBACK (on_audio_input_volume_changed),
-      context);
-
-  return result;
-}
-
-static GstElement *
-setup_video_source (ChannelContext *context, TfContent *content)
-{
-  GstElement *result, *capsfilter;
-  GstCaps *caps;
-  guint framerate = 0, width = 0, height = 0;
-
-  result = gst_parse_bin_from_description_full (
-      "videotestsrc is-live=1 ! videomaxrate ! videoscale ! colorspace ! capsfilter name=c",
-      TRUE, NULL, GST_PARSE_FLAG_FATAL_ERRORS, NULL);
-
-  g_assert (result);
-  capsfilter = gst_bin_get_by_name (GST_BIN (result), "c");
-
-  g_object_get (content,
-      "framerate", &framerate,
-      "width", &width,
-      "height", &height,
-      NULL);
-
-  if (framerate == 0)
-    framerate = 15;
-
-  if (width == 0 || height == 0)
-    {
-      width = 320;
-      height = 240;
-    }
-
-  context->framerate = framerate;
-  context->width = width;
-  context->height = height;
-
-  caps = gst_caps_new_simple ("video/x-raw-yuv",
-      "width", G_TYPE_INT, width,
-      "height", G_TYPE_INT, height,
-      "framerate", GST_TYPE_FRACTION, framerate, 1,
-      NULL);
-
-  g_object_set (G_OBJECT (capsfilter), "caps", caps, NULL);
-
-  gst_caps_unref (caps);
-
-  context->video_input = result;
-  context->video_capsfilter = capsfilter;
-
-  g_signal_connect (content, "notify::framerate",
-    G_CALLBACK (on_video_framerate_changed),
-    context);
-
-  g_signal_connect (content, "resolution-changed",
-    G_CALLBACK (on_video_resolution_changed),
-    context);
-
-  return result;
-}
-
-static gboolean
-start_sending_cb (TfContent *content, gpointer user_data)
-{
-  ChannelContext *context = user_data;
-  GstPad *srcpad, *sinkpad;
-  FsMediaType mtype;
-  GstElement *element;
-  GstStateChangeReturn ret;
-  gboolean res = FALSE;
-
-  g_debug ("Start sending");
-
-  g_object_get (content,
-    "sink-pad", &sinkpad,
-    "media-type", &mtype,
-    NULL);
-
-  switch (mtype)
-    {
-      case FS_MEDIA_TYPE_AUDIO:
-        if (context->has_audio_src)
-          goto out;
-
-        element = setup_audio_source (context, content);
-        break;
-      case FS_MEDIA_TYPE_VIDEO:
-        if (context->has_video_src)
-          goto out;
-
-        element = setup_video_source (context, content);
-        break;
-      default:
-        g_warning ("Unknown media type");
-        goto out;
-    }
-
-
-  gst_bin_add (GST_BIN (context->pipeline), element);
-  srcpad = gst_element_get_pad (element, "src");
-
-  if (GST_PAD_LINK_FAILED (gst_pad_link (srcpad, sinkpad)))
+  if (GST_PAD_LINK_FAILED (gst_pad_link (element_srcpad, content_sinkpad)))
     {
       tp_channel_close_async (TP_CHANNEL (context->proxy), NULL, NULL);
-      g_warning ("Couldn't link source pipeline !?");
-      goto out2;
+      g_warning ("Couldn't link queue to sink pad !?");
+      goto err;
     }
 
-  ret = gst_element_set_state (element, GST_STATE_PLAYING);
-  if (ret == GST_STATE_CHANGE_FAILURE)
-    {
-      tp_channel_close_async (TP_CHANNEL (context->proxy), NULL, NULL);
-      g_warning ("source pipeline failed to start!?");
-      goto out2;
-    }
+  g_signal_connect (pad, "unlinked",
+      G_CALLBACK (src_pad_unlinked_cb), context);
 
-  res = TRUE;
-
-out2:
-  g_object_unref (srcpad);
 out:
-  g_object_unref (sinkpad);
+  gst_object_unref (element_sinkpad);
+  gst_object_unref (element_srcpad);
+  gst_object_unref (content_sinkpad);
 
-  return res;
+  return;
+
+err:
+  src_pad_unlinked_cb (pad, element_sinkpad, context);
+  goto out;
 }
 
 static void
@@ -410,9 +158,7 @@ content_added_cb (TfChannel *channel,
   g_debug ("Content added");
 
   g_signal_connect (content, "src-pad-added",
-    G_CALLBACK (src_pad_added_cb), context);
-  g_signal_connect (content, "start-sending",
-      G_CALLBACK (start_sending_cb), context);
+      G_CALLBACK (src_pad_added_cb), context);
 }
 
 static void
