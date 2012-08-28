@@ -536,10 +536,18 @@ call_state_changed_cb (TpCallChannel *self,
   guint flags,
   TpCallStateReason reason,
   GHashTable *details,
-  gpointer user_data)
+  ChannelContext *context)
 {
-  if (state == TP_CALL_STATE_INITIALISED)
-    tp_call_channel_accept_async (self, NULL, NULL);
+  switch (state)
+    {
+      case TP_CALL_STATE_INITIALISED:
+        if (!tp_channel_get_requested (TP_CHANNEL (self)))
+          tp_call_channel_accept_async (self, NULL, NULL);
+        break;
+      case TP_CALL_STATE_ENDED:
+        g_debug ("Call ended");
+        tp_channel_close_async (TP_CHANNEL (self), NULL, NULL);
+    }
 }
 
 static void
@@ -585,6 +593,8 @@ new_call_channel_cb (TpSimpleHandler *handler,
 
   tp_handle_channels_context_accept (handler_context);
 
+  g_signal_connect (call, "state-changed",
+    G_CALLBACK (call_state_changed_cb), context);
   if (tp_channel_get_requested (TP_CHANNEL (call)))
     {
       if (tp_call_channel_get_state (call,
@@ -593,8 +603,6 @@ new_call_channel_cb (TpSimpleHandler *handler,
     }
   else
     {
-      g_signal_connect (call, "state-changed",
-        G_CALLBACK (call_state_changed_cb), NULL);
       if (tp_call_channel_get_state (call, NULL, NULL, NULL) ==
           TP_CALL_STATE_INITIALISED)
         tp_call_channel_accept_async (call, NULL, NULL);
