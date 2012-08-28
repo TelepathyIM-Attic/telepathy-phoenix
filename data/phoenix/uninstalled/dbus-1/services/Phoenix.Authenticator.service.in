@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.freedesktop.Telepathy.Client.Phoenix.Authenticator
+Exec=@abs_top_builddir@/src/phoenix-authenticator

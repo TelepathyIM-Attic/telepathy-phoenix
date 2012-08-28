@@ -1,0 +1,4 @@
+[org.freedesktop.Telepathy.Client]
+Interfaces=org.freedesktop.Telepathy.Client.Approver
+
+[org.freedesktop.Telepathy.Client.Approver.ApproverChannelFilter 0]
