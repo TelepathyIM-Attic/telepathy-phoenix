@@ -65,3 +65,25 @@ def setup_run_dir (path):
     override_env ("XDG_DATA_HOME", os.path.join (path, ".local"))
     override_env ("MC_ACCOUNT_DIR",
         os.path.join (path, ".config", "mission-control", "accounts"))
+
+def got_account_cb (o, r, password, func):
+    account = o.create_account_finish (r)
+    # Put the password in our credentials store
+    try:
+        os.makedirs (os.path.join (GLib.get_user_config_dir (), "phoenix"))
+    except:
+        pass
+    authfile = os.path.join (GLib.get_user_config_dir (), "phoenix", "auth")
+    f = open (authfile, "a+")
+    f.write (account.get_path_suffix() + " " + password + "\n")
+
+    func(account)
+
+def create_account (am, cm, protocol, name, parameters, password, func):
+    request = Tp.AccountRequest.new (am, cm, protocol, name)
+    for k,v in parameters.items():
+        request.set_parameter (k, v)
+
+    request.create_account_async (
+        lambda o, r, u: got_account_cb (o, r, password, func),
+        None)
