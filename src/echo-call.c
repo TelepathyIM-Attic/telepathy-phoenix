@@ -23,12 +23,20 @@
 #include <farstream/fs-utils.h>
 #include <telepathy-farstream/telepathy-farstream.h>
 
+typedef enum {
+  CALL_MODE_ECHO = 0,
+  CALL_MODE_TEST_INPUTS
+} CallMode;
+
 typedef struct {
   GstElement *pipeline;
   guint buswatch;
   TpChannel *proxy;
   TfChannel *channel;
   GList *notifiers;
+  CallMode mode;
+  GstElement *audio_src;
+  GstElement *video_src;
 } ChannelContext;
 
 GMainLoop *loop;
@@ -85,23 +93,16 @@ src_pad_unlinked_cb (GstPad *pad,
   gst_object_unref (element);
 }
 
+
 static void
-src_pad_added_cb (TfContent *content,
-    TpHandle handle,
-    FsStream *stream,
-    GstPad *pad,
-    FsCodec *codec,
-    gpointer user_data)
+setup_echo_sink (TfContent *content, GstPad *pad, ChannelContext *context)
 {
-  ChannelContext *context = user_data;
-  gchar *cstr = fs_codec_to_string (codec);
   GstPad *element_sinkpad;
   GstPad *element_srcpad;
   GstPad *content_sinkpad;
   GstElement *element;
   GstStateChangeReturn ret;
 
-  g_debug ("New src pad: %s", cstr);
   g_object_get (content, "sink-pad", &content_sinkpad, NULL);
 
   element = gst_element_factory_make ("queue", NULL);
@@ -149,6 +150,139 @@ err:
 }
 
 static void
+setup_fake_sink (TfContent *content, GstPad *pad, ChannelContext *context)
+{
+  GstElement *element = gst_element_factory_make ("fakesink", NULL);
+  GstPad *sinkpad;
+  GstStateChangeReturn ret;
+
+  gst_bin_add (GST_BIN (context->pipeline), element);
+
+  ret = gst_element_set_state (element, GST_STATE_PLAYING);
+  sinkpad = gst_element_get_static_pad (element, "sink");
+  if (ret == GST_STATE_CHANGE_FAILURE)
+    {
+      tp_channel_close_async (TP_CHANNEL (context->proxy), NULL, NULL);
+      g_warning ("Failed to start sink pipeline !?");
+      goto err;
+    }
+
+  if (GST_PAD_LINK_FAILED (gst_pad_link (pad, sinkpad)))
+    {
+      tp_channel_close_async (TP_CHANNEL (context->proxy), NULL, NULL);
+      g_warning ("Couldn't link src pad to queue !?");
+      goto err;
+    }
+
+  return;
+
+err:
+  gst_bin_remove (GST_BIN (context->pipeline), element);
+  gst_object_unref (element);
+  gst_object_unref (sinkpad);
+}
+
+static void
+src_pad_added_cb (TfContent *content,
+    TpHandle handle,
+    FsStream *stream,
+    GstPad *pad,
+    FsCodec *codec,
+    gpointer user_data)
+{
+  ChannelContext *context = user_data;
+  gchar *cstr = fs_codec_to_string (codec);
+  g_debug ("New src pad: %s", cstr);
+  g_free (cstr);
+
+  switch (context->mode)
+    {
+      case CALL_MODE_ECHO:
+        setup_echo_sink (content, pad, context);
+        break;
+      case CALL_MODE_TEST_INPUTS:
+        setup_fake_sink (content, pad, context);
+        break;
+    }
+}
+
+static gboolean
+start_sending_cb (TfContent *content, gpointer user_data)
+{
+  ChannelContext *context = user_data;
+  GstPad *srcpad, *sinkpad;
+  FsMediaType mtype;
+  GstElement *element;
+  GstStateChangeReturn ret;
+  gboolean res = FALSE;
+
+  g_debug ("Start sending");
+
+  /* When echoing the source will get setup when we start receiving data */
+  if (context->mode == CALL_MODE_ECHO)
+    return TRUE;
+
+  g_object_get (content,
+    "sink-pad", &sinkpad,
+    "media-type", &mtype,
+    NULL);
+
+  switch (mtype)
+    {
+      case FS_MEDIA_TYPE_AUDIO:
+        if (context->audio_src)
+          goto out;
+
+        element = gst_parse_bin_from_description (
+          "audiotestsrc is-live=1", TRUE, NULL);
+        context->audio_src = element;
+        break;
+      case FS_MEDIA_TYPE_VIDEO:
+        if (context->video_src)
+          goto out;
+
+        element = gst_parse_bin_from_description (
+          "videotestsrc is-live=1 ! video/x-raw-yuv, width=320, height=240",
+          TRUE, NULL);
+        context->video_src = element;
+        break;
+      default:
+        g_warning ("Unknown media type");
+        goto out;
+    }
+
+
+  gst_bin_add (GST_BIN (context->pipeline), element);
+  srcpad = gst_element_get_static_pad (element, "src");
+
+  if (GST_PAD_LINK_FAILED (gst_pad_link (srcpad, sinkpad)))
+    {
+      tp_channel_close_async (TP_CHANNEL (context->proxy), NULL, NULL);
+      g_warning ("Couldn't link source pipeline !?");
+      goto out2;
+    }
+
+  ret = gst_element_set_state (element, GST_STATE_PLAYING);
+  if (ret == GST_STATE_CHANGE_FAILURE)
+    {
+      tp_channel_close_async (TP_CHANNEL (context->proxy), NULL, NULL);
+      g_warning ("source pipeline failed to start!?");
+      goto out2;
+    }
+
+  res = TRUE;
+
+out2:
+  g_object_unref (srcpad);
+out:
+  g_object_unref (sinkpad);
+
+  return res;
+}
+
+
+
+static void
 content_added_cb (TfChannel *channel,
     TfContent *content,
     gpointer user_data)
@@ -157,6 +291,8 @@ content_added_cb (TfChannel *channel,
 
   g_debug ("Content added");
 
+  g_signal_connect (content, "start-sending",
+      G_CALLBACK (start_sending_cb), context);
   g_signal_connect (content, "src-pad-added",
       G_CALLBACK (src_pad_added_cb), context);
 }
@@ -294,6 +430,7 @@ new_call_channel_cb (TpSimpleHandler *handler,
   GstBus *bus;
   GstElement *pipeline;
   GstStateChangeReturn ret;
+  GList *rl;
 
   g_debug ("New channel");
 
@@ -313,6 +450,21 @@ new_call_channel_cb (TpSimpleHandler *handler,
 
   context = g_slice_new0 (ChannelContext);
   context->pipeline = pipeline;
+
+  for (rl = requests_satisfied; rl != NULL; rl = g_list_next (rl))
+    {
+      const gchar *mode;
+      const GHashTable *hints =
+        tp_channel_request_get_hints (TP_CHANNEL_REQUEST (rl->data));
+
+      mode = tp_asv_get_string (hints, "call-mode");
+      if (!tp_strdiff (mode, "test-inputs"))
+        context->mode = CALL_MODE_TEST_INPUTS;
+      else if (!tp_strdiff (mode, "echo"))
+        context->mode = CALL_MODE_ECHO;
+
+
+    }
 
   bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
   context->buswatch = gst_bus_add_watch (bus, bus_watch_cb, context);
