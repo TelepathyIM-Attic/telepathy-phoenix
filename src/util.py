@@ -55,7 +55,7 @@ def prepend_env_path (variable, prefix):
 def setup_data_dir (path):
     # Define default if not set as per XDG spec
     if os.getenv("XDG_DATA_DIRS") == None:
-        os.environ["XDG_DATA_DIRS"] = " /usr/local/share/:/usr/share/"
+        os.environ["XDG_DATA_DIRS"] = "/usr/local/share/:/usr/share/"
     prepend_env_path ("XDG_DATA_DIRS", path)
 
 def setup_run_dir (path):
