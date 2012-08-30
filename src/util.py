@@ -3,8 +3,25 @@
 import subprocess
 import atexit
 import os
+import sys
 import signal
 import dbus
+
+from threading import Thread
+from gi.repository import GLib, Gio
+from gi.repository import TelepathyGLib as Tp
+
+
+def _got_line (d, r, u):
+    line = d.read_line_finish (r)
+    print "STDOUT: " + str(line)
+    d.read_line_async (0, None, _got_line, None)
+
+def _process_input(f):
+    i = Gio.UnixInputStream.new (f.fileno(), True)
+    d = Gio.DataInputStream.new (i)
+    d.read_line_async (0, None, _got_line, None)
+
 
 def spawnbus(config = None):
     command = [ "dbus-daemon", "--session", "--nofork", "--print-address" ]
@@ -20,6 +37,8 @@ def spawnbus(config = None):
     os.environ ["DBUS_SESSION_BUS_ADDRESS"] = address
     print "Temporary Session bus: %s" % address
 
+    # Process stdout
+    _process_input (process.stdout)
 
 def override_env (variable, var):
     os.environ[variable] = var
