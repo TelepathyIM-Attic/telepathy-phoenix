@@ -1,0 +1,7 @@
+<node>
+  <interface name="org.freedesktop.Telepathy.Phoenix.CallInfo">
+    <property name="Channel" type="o" access="read"/>
+    <property name="ReceivingVideo" type="b" access="read"/>
+    <property name="ReceivingAudio" type="b" access="read"/>
+  </interface>
+</node>

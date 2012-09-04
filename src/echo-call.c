@@ -23,6 +23,11 @@
 #include <farstream/fs-utils.h>
 #include <telepathy-farstream/telepathy-farstream.h>
 
+#include "echo-call-info-dbus.h"
+
+#define CALLS_OBJECT_PATH "/org/freedesktop/Telepathy/Phoenix/Calls"
+#define CALLS_NAME "org.freedesktop.Telepathy.Phoenix.Calls"
+
 typedef enum {
   CALL_MODE_ECHO = 0,
   CALL_MODE_TEST_INPUTS
@@ -37,9 +42,12 @@ typedef struct {
   CallMode mode;
   GstElement *audio_src;
   GstElement *video_src;
+  EciObjectSkeleton *call_object;
+  EciCallInfo *call_info;
 } ChannelContext;
 
 GMainLoop *loop;
+GDBusObjectManagerServer *object_manager;
 
 static gboolean
 bus_watch_cb (GstBus *bus,
@@ -192,8 +200,22 @@ src_pad_added_cb (TfContent *content,
 {
   ChannelContext *context = user_data;
   gchar *cstr = fs_codec_to_string (codec);
+  FsMediaType mtype;
+
   g_debug ("New src pad: %s", cstr);
   g_free (cstr);
+
+  g_object_get (content, "media-type", &mtype, NULL);
+
+  switch (mtype)
+    {
+      case FS_MEDIA_TYPE_AUDIO:
+        eci_call_info_set_receiving_audio (context->call_info, TRUE);
+        break;
+      case FS_MEDIA_TYPE_VIDEO:
+        eci_call_info_set_receiving_video (context->call_info, TRUE);
+        break;
+    }
 
   switch (context->mode)
     {
@@ -392,6 +414,12 @@ proxy_invalidated_cb (TpProxy *proxy,
 
   g_object_unref (context->proxy);
 
+   g_dbus_object_manager_server_unexport (object_manager,
+    g_dbus_object_get_object_path (G_DBUS_OBJECT (context->call_object)));
+
+  g_object_unref (context->call_info);
+  g_object_unref (context->call_object);
+
   g_slice_free (ChannelContext, context);
 }
 
@@ -431,6 +459,7 @@ new_call_channel_cb (TpSimpleHandler *handler,
   GstElement *pipeline;
   GstStateChangeReturn ret;
   GList *rl;
+  gchar *path;
 
   g_debug ("New channel");
 
@@ -450,6 +479,25 @@ new_call_channel_cb (TpSimpleHandler *handler,
 
   context = g_slice_new0 (ChannelContext);
   context->pipeline = pipeline;
+  context->call_info = eci_call_info_skeleton_new ();
+
+  g_object_set (context->call_info,
+    "receiving-audio", FALSE,
+    "receiving-video", FALSE,
+    "channel", tp_proxy_get_object_path (call),
+    NULL);
+
+  path = g_strdup_printf ("%s%s",
+    CALLS_OBJECT_PATH,
+    tp_proxy_get_object_path (call));
+  context->call_object = eci_object_skeleton_new (path);
+  g_free(path);
+
+  eci_object_skeleton_set_call_info (context->call_object,
+    context->call_info);
+
+  g_dbus_object_manager_server_export (object_manager,
+    G_DBUS_OBJECT_SKELETON (context->call_object));
 
   for (rl = requests_satisfied; rl != NULL; rl = g_list_next (rl))
     {
@@ -462,8 +510,6 @@ new_call_channel_cb (TpSimpleHandler *handler,
         context->mode = CALL_MODE_TEST_INPUTS;
       else if (!tp_strdiff (mode, "echo"))
         context->mode = CALL_MODE_ECHO;
-
-
     }
 
   bus = gst_pipeline_get_bus (GST_PIPELINE (pipeline));
@@ -500,6 +546,7 @@ main (int argc, char **argv)
 {
   TpBaseClient *client;
   TpAccountManager *am;
+  GDBusConnection *connection;
 
   g_type_init ();
   gst_init (&argc, &argv);
@@ -545,6 +592,19 @@ main (int argc, char **argv)
     NULL);
 
   tp_base_client_register (client, NULL);
+
+  connection = g_bus_get_sync (G_BUS_TYPE_STARTER,
+    NULL, NULL);
+  g_assert (connection != NULL);
+  object_manager = g_dbus_object_manager_server_new (
+    CALLS_OBJECT_PATH);
+  g_dbus_object_manager_server_set_connection (object_manager,
+    connection);
+
+  g_bus_own_name_on_connection (connection,
+    CALLS_NAME,
+    G_BUS_NAME_OWNER_FLAGS_REPLACE,
+    NULL, NULL, NULL, NULL);
 
   g_main_loop_run (loop);
 

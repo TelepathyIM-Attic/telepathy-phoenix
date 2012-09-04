@@ -35,8 +35,9 @@ AS_COMPILER_FLAG(-Wno-unused-parameter,
         wno_unused_parameter=yes,
         wno_unused_parameter=no)
 
-dnl Check for Glib
-PKG_CHECK_MODULES(GLIB, gobject-2.0 >= 2.30 glib-2.0 >= 2.30 gio-2.0)
+dnl Check for Glib and friends
+PKG_CHECK_MODULES(GLIB, gobject-2.0 >= 2.30 glib-2.0 >= 2.30
+  gio-2.0 gio-unix-2.0)
 AC_DEFINE(GLIB_VERSION_MIN_REQUIRED, GLIB_VERSION_2_30, [Ignore post 2.30 deprecations])
 AC_DEFINE(GLIB_VERSION_MAX_ALLOWED, GLIB_VERSION_2_30, [Prevent post 2.30 APIs])
 
