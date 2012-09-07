@@ -13,58 +13,63 @@ from gi.repository import TelepathyGLib as Tp
 
 
 def _got_line (d, r, u):
+    (prefix, quiet) = u
     line = d.read_line_finish (r)
-    print "STDOUT: " + str(line)
-    d.read_line_async (0, None, _got_line, None)
+    if not quiet:
+        print prefix + ": " + str(line)
+    d.read_line_async (0, None, _got_line, u)
 
-def _process_input(f):
+def _process_input(f, prefix, quiet):
     i = Gio.UnixInputStream.new (f.fileno(), True)
     d = Gio.DataInputStream.new (i)
-    d.read_line_async (0, None, _got_line, None)
+    d.read_line_async (0, None, _got_line, (prefix, quiet))
 
 
-def spawnbus(config = None):
+def spawnbus(quiet = False):
     command = [ "dbus-daemon", "--session", "--nofork", "--print-address" ]
-    if config:
-        command.append("--config-file=config")
 
     process = subprocess.Popen (command,
         stdout = subprocess.PIPE,
+        stderr = subprocess.PIPE,
     )
     atexit.register (lambda p: os.kill (p.pid, signal.SIGKILL), process)
 
     address = process.stdout.readline().rstrip()
     os.environ ["DBUS_SESSION_BUS_ADDRESS"] = address
-    print "Temporary Session bus: %s" % address
+    if not quiet:
+        print "Temporary Session bus: %s" % address
 
     # Process stdout
-    _process_input (process.stdout)
+    _process_input (process.stdout, "STDOUT", quiet)
+    _process_input (process.stderr, "STDERR", quiet)
+    return process
 
-def override_env (variable, var):
+def override_env (variable, var, quiet = False):
     os.environ[variable] = var
-    print "Setting %s to %s" % (variable, var)
+    if not quiet:
+        print "Setting %s to %s" % (variable, var)
 
-def prepend_env_path (variable, prefix):
+def prepend_env_path (variable, prefix, quiet = False):
     current = os.getenv(variable)
     if current != None:
         p = prefix + ":" + current
     else:
         p = prefix
-    override_env (variable, p)
+    override_env (variable, p, quiet)
 
-def setup_data_dir (path):
+def setup_data_dir (path, quiet = False):
     # Define default if not set as per XDG spec
     if os.getenv("XDG_DATA_DIRS") == None:
         os.environ["XDG_DATA_DIRS"] = "/usr/local/share/:/usr/share/"
-    prepend_env_path ("XDG_DATA_DIRS", path)
+    prepend_env_path ("XDG_DATA_DIRS", path, quiet)
 
-def setup_run_dir (path):
+def setup_run_dir (path, quiet= False):
     # Setup all the various XDG paths
-    override_env ("XDG_CONFIG_HOME", os.path.join (path, ".config"))
-    override_env ("XDG_CACHE_HOME", os.path.join (path, ".cache"))
-    override_env ("XDG_DATA_HOME", os.path.join (path, ".local"))
+    override_env ("XDG_CONFIG_HOME", os.path.join (path, ".config"), quiet)
+    override_env ("XDG_CACHE_HOME", os.path.join (path, ".cache"), quiet)
+    override_env ("XDG_DATA_HOME", os.path.join (path, ".local"), quiet)
     override_env ("MC_ACCOUNT_DIR",
-        os.path.join (path, ".config", "mission-control", "accounts"))
+        os.path.join (path, ".config", "mission-control", "accounts"), quiet)
 
 def got_account_cb (o, r, password, func):
     account = o.create_account_finish (r)
