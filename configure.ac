@@ -64,5 +64,4 @@ AC_OUTPUT( Makefile \
           src/Makefile \
           data/Makefile \
           data/phoenix/Makefile \
-          data/phoenix/uninstalled/Makefile \
 )
