@@ -1,3 +1,3 @@
 #!/bin/sh
 
-exec python "PKGDATADIR/phoenix-test.py" $@
+exec python "@PATH@/phoenix-test.py" --datadir=@DATADIR@ $@

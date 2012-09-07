@@ -6,6 +6,7 @@ EXTRA_DIST = \
 
 bin_SCRIPTS=phoenix phoenix-test
 bin_SCRIPTS_IN=phoenix.in phoenix-test.in
+BUILT_SOURCES=phoenix-uninstalled phoenix-test-uninstalled
 
 pythondir = $(pkgdatadir)
 python_DATA=phoenix.py phoenix-test.py util.py
@@ -25,9 +26,22 @@ phoenix_echo_call_LDFLAGS = @GLIB_LIBS@ @TP_GLIB_LIBS@ \
                                @TP_FARSTREAM_LIBS@
 
 phoenix: phoenix.in
-	sed -e "s,PKGDATADIR,$(pkgdatadir)," < $<  > $@
+	sed -e "s,[@]DATADIR[@],$(pkgdatadir)/data," \
+	-e "s,[@]PATH[@],$(pkgdatadir)," < $<  > $@
+
+phoenix-uninstalled: phoenix.in
+	sed -e "s,[@]DATADIR[@],@abs_top_builddir@/data/uninstalled," \
+	-e "s,[@]PATH[@],@abs_top_builddir@/src," < $<  > $@
+	@chmod +x $@
 
 phoenix-test: phoenix-test.in
-	sed -e "s,PKGDATADIR,$(pkgdatadir)," < $<  > $@
+	sed -e "s,[@]DATADIR[@],$(pkgdatadir)/data," \
+	-e "s,[@]PATH[@],$(pkgdatadir)," < $<  > $@
 
-CLEANFILES = $(bin_SCRIPTS)
+phoenix-test-uninstalled: phoenix-test.in
+	sed -e "s,[@]DATADIR[@],@abs_top_builddir@/data/uninstalled," \
+	-e "s,[@]PATH[@],@abs_top_builddir@/src," < $<  > $@
+	@chmod +x $@
+
+
+CLEANFILES = $(bin_SCRIPTS) $(BUILT_SOURCES)
