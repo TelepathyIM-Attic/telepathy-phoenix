@@ -36,5 +36,6 @@ src/phoenix-authenticator
 src/phoenix-echo-call
 src/phoenix
 src/phoenix-uninstalled
+src/phoenix-test
 src/phoenix-test-uninstalled
 *.o
