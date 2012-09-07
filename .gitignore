@@ -34,4 +34,6 @@ data/phoenix/uninstalled
 
 src/phoenix-authenticator
 src/phoenix-echo-call
+src/phoenix
+src/phoenix-test
 *.o
