@@ -29,8 +29,8 @@ m4/ltsugar.m4
 m4/ltversion.m4
 m4/lt~obsolete.m4
 
-data/phoenix/uninstalled/dbus-1/services/*.service
-data/phoenix/uninstalled/telepathy/clients/*.client
+data/phoenix/*.service
+data/phoenix/uninstalled
 
 src/phoenix-authenticator
 src/phoenix-echo-call
