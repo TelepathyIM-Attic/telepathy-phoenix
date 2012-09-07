@@ -29,11 +29,12 @@ m4/ltsugar.m4
 m4/ltversion.m4
 m4/lt~obsolete.m4
 
-data/phoenix/*.service
-data/phoenix/uninstalled
+data/*.service
+data/uninstalled
 
 src/phoenix-authenticator
 src/phoenix-echo-call
 src/phoenix
-src/phoenix-test
+src/phoenix-uninstalled
+src/phoenix-test-uninstalled
 *.o
