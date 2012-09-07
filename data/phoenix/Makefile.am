@@ -1,5 +1,15 @@
 U_DBUS=uninstalled/dbus-1/services
 
+EXTRA_DIST = \
+  dbus-services/Phoenix.Approver.service.in \
+  dbus-services/Phoenix.Authenticator.service.in \
+  dbus-services/Phoenix.EchoCall.service.in \
+  dbus-services/Phoenix.EchoText.service.in \
+  telepathy-clients/Phoenix.Approver.client \
+  telepathy-clients/Phoenix.Authenticator.client \
+  telepathy-clients/Phoenix.EchoCall.client \
+  telepathy-clients/Phoenix.EchoText.client
+
 service_files = \
   org.freedesktop.Telepathy.Client.Phoenix.EchoCall.service \
   org.freedesktop.Telepathy.Client.Phoenix.EchoText.service \

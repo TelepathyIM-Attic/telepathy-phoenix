@@ -1,11 +1,8 @@
 EXTRA_DIST = \
-  approver.py \
-  echo-text.py \
-  phoenix.py  \
-  phoenix-test.py  \
-  util.py \
   echo-call-info.xml \
-  $(bin_SCRIPTS_IN)
+  $(bin_SCRIPTS_IN) \
+  $(python_DATA) \
+  $(libexec_SCRIPTS)
 
 bin_SCRIPTS=phoenix phoenix-test
 bin_SCRIPTS_IN=phoenix.in phoenix-test.in
