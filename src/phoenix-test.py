@@ -7,7 +7,8 @@ import tempfile
 import shutil
 import time
 import signal
-from util import spawnbus, setup_data_dir, setup_run_dir, create_account
+from util import spawnbus, setup_data_dir
+from util import setup_run_dir, create_account, scrub_env
 
 from gi.repository import GObject, Gio, GLib
 from gi.repository import TelepathyGLib as Tp
@@ -286,6 +287,7 @@ if __name__ == '__main__':
     if datadir != None:
         setup_data_dir(datadir, quiet)
 
+    scrub_env()
     p = spawnbus(quiet)
     loop = GObject.MainLoop()
     t = TestCase (loop, testcontact, quiet)

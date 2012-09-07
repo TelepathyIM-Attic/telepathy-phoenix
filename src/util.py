@@ -71,6 +71,13 @@ def setup_run_dir (path, quiet= False):
     override_env ("MC_ACCOUNT_DIR",
         os.path.join (path, ".config", "mission-control", "accounts"), quiet)
 
+def drop_env_var(variable):
+    if variable in os.environ.keys():
+        os.environ.pop(variable)
+
+def scrub_env():
+    drop_env_var ("GNOME_KEYRING_CONTROL")
+
 def got_account_cb (o, r, password, func):
     account = o.create_account_finish (r)
     # Put the password in our credentials store

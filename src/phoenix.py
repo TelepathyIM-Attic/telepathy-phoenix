@@ -3,7 +3,7 @@
 import os
 import sys
 import getopt
-from util import spawnbus, setup_data_dir, setup_run_dir
+from util import spawnbus, setup_data_dir, setup_run_dir, scrub_env
 
 from gi.repository import GObject, Gio
 from gi.repository import TelepathyGLib as Tp
@@ -141,7 +141,9 @@ if __name__ == '__main__':
     except getopt.GetoptError, err:
         print str(err)
         sys.exit(2)
-    spawnbus ()
+
+    scrub_env()
+    spawnbus()
 
     Tp.debug_set_flags(os.getenv('PHOENIX_DEBUG', ''))
 
