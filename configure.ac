@@ -1,5 +1,5 @@
 AC_PREREQ([2.59])
-AC_INIT([telepathy-phoenix], [0.0.1],
+AC_INIT([telepathy-phoenix], [0.0.1.1],
         [https://bugs.freedesktop.org/enter_bug.cgi?product=Telepathy&component=phoenix])
 
 AC_CONFIG_MACRO_DIR([m4])
