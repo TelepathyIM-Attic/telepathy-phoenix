@@ -1,1 +1,13 @@
-Telepathy phoenix echo bot & tester
+Telepathy Phoenix echo bot & tester
+
+Phoenix is a echo bot for the telepathy framework re-using the standard
+Telepathy infrastructure. Mission control is used for the account management,
+standard Telepathy clients are used for the echo implementation.
+
+To setup the echo bot, configure and enable the echo bot account in
+mission-control (using mc-tool for example). If passwords are requried, the
+authentication handler for Phoenix can only handle the X-TELEPATHY-PASSWORD
+mechanism and expects to find the password in a file called phoenix/auth under
+XDG_CONFIG_HOME (normally ~/.config). The format of this file is simply, one
+line for each account containing:
+  <account path suffix> <password>
