@@ -50,7 +50,7 @@ PKG_CHECK_MODULES([TP_GLIB], [telepathy-glib >= 0.17.5])
 AC_SUBST(TP_GLIB_CFLAGS)
 AC_SUBST(TP_GLIB_LIBS)
 
-dnl Check for farstream
+dnl Check for telepathy-farstream
 PKG_CHECK_MODULES(TP_FARSTREAM, [telepathy-farstream >= 0.1.0])
 
 AC_SUBST(TP_FARSTREAM_CFLAGS)
