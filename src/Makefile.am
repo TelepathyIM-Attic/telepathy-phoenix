@@ -21,9 +21,9 @@ phoenix_authenticator_LDFLAGS = @GLIB_LIBS@ @TP_GLIB_LIBS@
 phoenix_echo_call_SOURCES = echo-call.c \
     echo-call-info-dbus.c echo-call-info-dbus.h
 phoenix_echo_call_CFLAGS = @GLIB_CFLAGS@ @TP_GLIB_CFLAGS@ \
-                               @TP_FARSTREAM_CFLAGS@
+                               @TP_FARSTREAM_CFLAGS@ @FARSTREAM_CFLAGS@
 phoenix_echo_call_LDFLAGS = @GLIB_LIBS@ @TP_GLIB_LIBS@ \
-                               @TP_FARSTREAM_LIBS@
+                               @TP_FARSTREAM_LIBS@ @FARSTREAM_LIBS@
 
 phoenix: phoenix.in
 	sed -e "s,[@]DATADIR[@],$(pkgdatadir)/data," \

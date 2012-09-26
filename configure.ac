@@ -56,6 +56,12 @@ PKG_CHECK_MODULES(TP_FARSTREAM, [telepathy-farstream >= 0.1.0])
 AC_SUBST(TP_FARSTREAM_CFLAGS)
 AC_SUBST(TP_FARSTREAM_LIBS)
 
+dnl Check for farstream
+PKG_CHECK_MODULES(FARSTREAM, [farstream-0.1])
+
+AC_SUBST(FARSTREAM_CFLAGS)
+AC_SUBST(FARSTREAM_LIBS)
+
 dnl Always required to generate extensions
 AM_PATH_PYTHON([2.5])
 
