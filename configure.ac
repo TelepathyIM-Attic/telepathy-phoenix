@@ -62,6 +62,13 @@ PKG_CHECK_MODULES(FARSTREAM, [farstream-0.1])
 AC_SUBST(FARSTREAM_CFLAGS)
 AC_SUBST(FARSTREAM_LIBS)
 
+dnl Check for GStreamer
+PKG_CHECK_MODULES(GST, [gstreamer-0.10])
+
+AC_SUBST(GST_CFLAGS)
+AC_SUBST(GST_LIBS)
+
+
 dnl Always required to generate extensions
 AM_PATH_PYTHON([2.5])
 
