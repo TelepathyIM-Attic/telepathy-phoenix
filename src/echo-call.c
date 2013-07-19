@@ -86,7 +86,7 @@ src_pad_unlinked_cb (GstPad *pad,
   g_debug ("Src pad unlinked");
 
   element = gst_pad_get_parent_element (peer);
-  element_srcpad = gst_element_get_pad (element, "src");
+  element_srcpad = gst_element_get_static_pad (element, "src");
 
   if (gst_pad_is_linked (element_srcpad))
     {
@@ -117,8 +117,8 @@ setup_echo_sink (TfContent *content, GstPad *pad, ChannelContext *context)
 
   gst_bin_add (GST_BIN (context->pipeline), element);
 
-  element_sinkpad = gst_element_get_pad (element, "sink");
-  element_srcpad = gst_element_get_pad (element, "src");
+  element_sinkpad = gst_element_get_static_pad (element, "sink");
+  element_srcpad = gst_element_get_static_pad (element, "src");
 
   ret = gst_element_set_state (element, GST_STATE_PLAYING);
   if (ret == GST_STATE_CHANGE_FAILURE)
